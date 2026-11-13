@@ -90,6 +90,8 @@ const id = z.coerce.number().int().positive();
 const item = z.object({
   client: z.string().refine(name => config.clients.some(entry => entry.name === name), 'Selecione um cliente cadastrado.'),
   jira: z.string().trim().min(1).max(250),
+  severity: z.enum(['P0', 'P1', 'P2', 'P3']).optional(),
+  circuit: z.string().trim().max(120).optional(),
   update: z.string().trim().min(1).max(1500),
   next: z.string().trim().min(1).max(600),
   followUp: z.string().trim().max(120),

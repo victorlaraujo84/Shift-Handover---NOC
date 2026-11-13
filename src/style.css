@@ -42,6 +42,8 @@ a, summary { color: #89ceff; }
 .incident p { white-space: pre-wrap; }
 .actions, .teams { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .check { display: flex; align-items: center; gap: 8px; }
+.queue-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, .3fr); gap: 10px; }
+.queue-filters .check { grid-column: 1 / -1; }
 summary { cursor: pointer; }
 details form { margin-top: 10px; display: grid; gap: 8px; }
 .settings dl, .turn-history { margin: 0; padding: 0; }

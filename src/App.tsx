@@ -12,6 +12,7 @@ const format = (date: string) => formatter.format(new Date(date));
 type Details = {
   client: string; jira: string; update: string; next: string;
   followUp: string; external: string; share: boolean; open: boolean;
+  severity?: 'P0' | 'P1' | 'P2' | 'P3'; circuit?: string;
 };
 type Item = { id: number; details: Details };
 type Handover = {
@@ -53,6 +54,8 @@ function App() {
   const [now, setNow] = useState(Date.now);
   const [view, setView] = useState<typeof views[number]>('Passagem ativa');
   const [search, setSearch] = useState('');
+  const [severity, setSeverity] = useState('');
+  const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
     void request<State>('/state').then(setState).catch(e => setError(e.message));
@@ -69,8 +72,10 @@ function App() {
   const items = editable && handover?.accepted_at
     ? state?.items
     : handover?.snapshot ?? state?.items.filter(item => item.details.open);
+  const term = search.trim().toLocaleLowerCase('pt-BR');
   const filtered = items?.filter(({ details }) =>
-    [details.jira, details.client, details.next].some(value => value.toLocaleLowerCase('pt-BR').includes(search.trim().toLocaleLowerCase('pt-BR'))));
+    (showClosed || details.open) && (!severity || details.severity === severity) &&
+    [details.jira, details.client, details.next, details.circuit ?? ''].some(value => value.toLocaleLowerCase('pt-BR').includes(term)));
   const visibleClients = new Map<string, Client>(state?.clients.map(client => [client.name, client]));
   for (const entry of [...(items ?? []), ...(handover?.snapshot ?? [])]) {
     if (!visibleClients.has(entry.details.client)) visibleClients.set(entry.details.client, { name: entry.details.client });
@@ -85,6 +90,8 @@ function App() {
   function select(id: number) {
     setView('Passagem ativa');
     setSearch('');
+    setSeverity('');
+    setShowClosed(false);
     setSelected(id);
     setForm(undefined);
     setPreview(undefined);
@@ -230,7 +237,13 @@ function App() {
                 setJiraIssue(undefined);
                 setForm({ id: null, details: { ...blank, client: state?.clients[0]?.name ?? '' } });
               }}>Adicionar pendência</button>}</div>
-              {!!items?.length && <label>Buscar pendências<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Chamado, cliente ou próxima ação" /></label>}
+              {!!items?.length && <div className="queue-filters">
+                <label>Buscar pendências<input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Chamado, cliente, circuito ou ação" /></label>
+                <label>Prioridade<select value={severity} onChange={e => setSeverity(e.target.value)}>
+                  <option value="">Todas</option>{['P0', 'P1', 'P2', 'P3'].map(value => <option key={value}>{value}</option>)}
+                </select></label>
+                {editable && handover.accepted_at && <label className="check"><input type="checkbox" checked={showClosed} onChange={e => setShowClosed(e.target.checked)} /> Mostrar concluídas</label>}
+              </div>}
               {form && editable && <form className="item-form" onSubmit={event => {
                 event.preventDefault();
                 void act(async () => {
@@ -251,6 +264,12 @@ function App() {
                 </div>}
                 <label>Última atualização<textarea required maxLength={1500} value={form.details.update} onChange={e => setField('update', e.target.value)} /></label>
                 <label>Próxima ação<textarea required maxLength={600} value={form.details.next} onChange={e => setField('next', e.target.value)} /></label>
+                <div className="queue-filters">
+                  <label>Circuito<input maxLength={120} value={form.details.circuit ?? ''} onChange={e => setField('circuit', e.target.value)} /></label>
+                  <label>Prioridade<select value={form.details.severity ?? ''} onChange={e => setField('severity', (e.target.value || undefined) as Details['severity'])}>
+                    <option value="">A definir</option>{['P0', 'P1', 'P2', 'P3'].map(value => <option key={value}>{value}</option>)}
+                  </select></label>
+                </div>
                 <label>Horário de acompanhamento<input maxLength={120} value={form.details.followUp} onChange={e => setField('followUp', e.target.value)} /></label>
                 <label className="check"><input type="checkbox" checked={form.details.open} onChange={e => setField('open', e.target.checked)} /> Pendência aberta</label>
                 <label className="check"><input type="checkbox" checked={form.details.share} onChange={e => setField('share', e.target.checked)} /> Incluir no recorte para o cliente</label>
@@ -260,10 +279,11 @@ function App() {
               {[...visibleClients.values()].map(client => {
                 const group = filtered?.filter(item => item.details.client === client.name) ?? [];
                 const canCopy = handover.snapshot?.some(item => item.details.client === client.name && item.details.share);
-                if (!group.length && (search.trim() || !canCopy)) return null;
+                if (!group.length && (term || severity || !canCopy)) return null;
                 return <section key={client.name} className="client"><div className="heading"><h3>{client.name}</h3>{canCopy && <button className="secondary" onClick={() => copyText(client)}>Preparar mensagem</button>}</div>
                   {group.map(item => <article key={item.id} className="incident">
                     <div className="heading"><h4>{item.details.jira}</h4>{editable && <button className="secondary" onClick={() => { setJiraIssue(undefined); setForm(item); }}>Editar</button>}</div>
+                    {(item.details.severity || item.details.circuit) && <p>{[item.details.severity, item.details.circuit].filter(Boolean).join(' · ')}</p>}
                     <p>{item.details.update}</p><p><strong>Próxima ação</strong> · {item.details.next}</p>
                     {item.details.followUp && <p>Acompanhar · {item.details.followUp}</p>}
                     {!item.details.open && <p>Concluída</p>}
