@@ -214,6 +214,20 @@ function App() {
               </label>)}
               <button disabled={busy}>Salvar configurações</button>
             </form>}
+            {state.canEditSettings && <form className="item-form" onSubmit={event => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const data = new FormData(form);
+              void act(async () => {
+                await request('/clients', { name: data.get('name'), url: data.get('url') });
+                form.reset();
+              }, 'Cliente cadastrado.');
+            }}>
+              <h2>Cadastrar cliente</h2>
+              <label>Nome do cliente<input name="name" maxLength={100} required /></label>
+              <label>Conversa Chatwoot (opcional)<input name="url" type="url" maxLength={500} /></label>
+              <button disabled={busy}>Cadastrar cliente</button>
+            </form>}
             <p>A escala e as credenciais das integrações são administradas no servidor.</p>
             {feedback && <p role="status" className="notice">{feedback}</p>}
           </> : <p>Carregando configurações…</p>}

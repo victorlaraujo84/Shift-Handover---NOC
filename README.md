@@ -4,6 +4,8 @@
 
 A interface segue a identidade escura e a navegação do ShiftPulse NOC. A passagem ativa reúne a fila de pendências, a busca e a mensagem por cliente. **Histórico e turnos** abre as passagens anteriores. Em **Configurações**, administradores podem editar a tolerância global e os destinos do Chatwoot. O banco guarda essas alterações e usa o ambiente e o arquivo como valores iniciais. Deixe a URL em branco para retirar um destino. No modo compartilhado, atribua `admin: true` somente às contas que administram a operação.
 
+A seção **Cadastrar cliente** inclui novos clientes no seletor da passagem e permite indicar uma conversa do Chatwoot no cadastro. Os clientes do arquivo são incluídos no banco na inicialização. Depois disso, os destinos são mantidos pela interface.
+
 A versão integrada usa PostgreSQL. Instalações do protótipo anterior que tenham registros em `.data/noc-store.json` precisam validar e migrar esses registros antes da troca de versão. O piloto pode começar com um banco novo e dados fictícios.
 
 Piloto local com React, Vite, TypeScript, Express e PostgreSQL. O servidor usa PGlite para execução local ou PostgreSQL externo quando `DATABASE_URL` está configurada.

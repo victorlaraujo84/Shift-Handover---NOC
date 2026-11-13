@@ -67,6 +67,11 @@ try {
   const configured = await call('/state');
   assert.equal(configured.grace, 0);
   assert.equal(configured.clients[0].chatwoot, settings.destinations[0].url);
+  const newClient = { name: 'Cliente Z', url: 'https://app.chatwoot.com/app/accounts/1/conversations/103' };
+  await call('/clients', newClient, 201);
+  await call('/clients', newClient, 409);
+  await call('/settings', { ...settings, revision: configured.settingsRevision }, 409);
+  assert.equal((await call('/state')).clients.find(client => client.name === newClient.name).chatwoot, newClient.url);
   const outgoing = { actor: 'Analista de saída' };
   const incoming = { actor: 'Analista de entrada', caveat: 'Validar visita' };
   const first = await call('/handovers', { startsAt: '2026-11-13T10:00:00Z' }, 201);
@@ -77,8 +82,9 @@ try {
   });
   const item = await save('Cliente X', 'INC-126039');
   await save('Cliente Y', 'INC-135038');
+  await save(newClient.name, 'INC-135039');
   await call(route + '/publish', { ...outgoing, revision: 0 }, 409);
-  await call(route + '/publish', { ...outgoing, revision: 2 });
+  await call(route + '/publish', { ...outgoing, revision: 3 });
   await call(route + '/comments', { ...incoming, itemId: item.item_id, body: 'Qual a data?' });
   const accept = () => fetch(base + '/api' + route + '/accept', {
     method: 'POST',
@@ -92,11 +98,11 @@ try {
   const state = await call('/state');
   assert.equal(state.handovers[0].snapshot[0].id, item.item_id);
   assert.equal(state.handovers[1].caveat, 'Validar visita');
-  assert.equal(state.history.length, 2);
+  assert.equal(state.history.length, 3);
   assert.equal(state.comments.length, 1);
   const message = customerMessage('Cliente X', '13/11/2026 07:00', state.handovers[1].snapshot);
   assert.match(message, /INC-126039\*\nCliente X externo/);
-  assert.doesNotMatch(message, /Cliente Y|INC-135038|Interno|Acompanhar/);
+  assert.doesNotMatch(message, /Cliente [YZ]|INC-13503[89]|Interno|Acompanhar/);
   console.log('OK: identidade do proxy, revisão da publicação, esclarecimento, aceite concorrente e continuidade.');
 } finally {
   server.kill();

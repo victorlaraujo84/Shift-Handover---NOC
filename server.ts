@@ -39,6 +39,14 @@ await query(`CREATE TABLE IF NOT EXISTS operational_settings (
   destinations jsonb NOT NULL,
   revision integer NOT NULL DEFAULT 0
 )`);
+await query(`CREATE TABLE IF NOT EXISTS registered_clients (
+  name text PRIMARY KEY,
+  initial_destination text
+)`);
+for (const client of config.clients) {
+  await query('INSERT INTO registered_clients (name, initial_destination) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [client.name, client.chatwoot ?? null]);
+}
 await query(`
   CREATE TABLE IF NOT EXISTS items (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -94,7 +102,7 @@ function author(req: express.Request, res: express.Response): string {
 }
 const id = z.coerce.number().int().positive();
 const item = z.object({
-  client: z.string().refine(name => config.clients.some(entry => entry.name === name), 'Selecione um cliente cadastrado.'),
+  client: z.string().min(1).max(100),
   jira: z.string().trim().min(1).max(250),
   severity: z.enum(['P0', 'P1', 'P2', 'P3']).optional(),
   circuit: z.string().trim().max(120).optional(),
@@ -108,25 +116,41 @@ const item = z.object({
   message: 'Preencha a mensagem para o cliente antes de compartilhar.',
 });
 
+const destination = z.string().trim().max(500).refine(value => {
+  if (!value) return true;
+  const url = URL.parse(value);
+  return !!url && url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash &&
+    /^\/app\/accounts\/\d+\/(?:inbox\/\d+\/)?conversations\/\d+\/?$/.test(url.pathname);
+}, 'Use o endereço HTTPS completo da conversa no Chatwoot.');
+
 const settingsInput = z.object({
   grace: z.number().int().min(0).max(1440),
   revision: z.number().int().nonnegative(),
   destinations: z.array(z.object({
     name: z.string(),
-    url: z.string().trim().max(500).refine(value => {
-      if (!value) return true;
-      const url = URL.parse(value);
-      return !!url && url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash &&
-        /^\/app\/accounts\/\d+\/(?:inbox\/\d+\/)?conversations\/\d+\/?$/.test(url.pathname);
-    }, 'Use o endereço HTTPS completo da conversa no Chatwoot.'),
-  })).max(config.clients.length),
-}).refine(value => new Set(value.destinations.map(entry => entry.name)).size === config.clients.length &&
-  value.destinations.every(entry => config.clients.some(client => client.name === entry.name)),
-  'A lista de clientes mudou. Atualize a página.');
+    url: destination,
+  })),
+});
+
+app.post('/api/clients', async (req, res) => {
+  if (shared && !res.locals.analyst.admin) return res.status(403).json({ error: 'Apenas administradores podem cadastrar clientes.' });
+  const { name, url } = z.object({ name: z.string().trim().min(1).max(100), url: destination }).parse(req.body);
+  const rows = await query(`
+    INSERT INTO registered_clients (name, initial_destination) VALUES ($1, $2)
+    ON CONFLICT DO NOTHING RETURNING name
+  `, [name, url || null]);
+  if (!rows.length) return res.status(409).json({ error: 'Já existe um cliente com esse nome.' });
+  res.status(201).json(rows[0]);
+});
 
 app.post('/api/settings', async (req, res) => {
   if (shared && !res.locals.analyst.admin) return res.status(403).json({ error: 'Apenas administradores podem editar configurações.' });
   const values = settingsInput.parse(req.body);
+  const clients = await query<{ name: string }>('SELECT name FROM registered_clients');
+  const names = new Set(values.destinations.map(entry => entry.name));
+  if (values.destinations.length !== clients.length || names.size !== clients.length || clients.some(client => !names.has(client.name))) {
+    return res.status(409).json({ error: 'A lista de clientes mudou. Atualize a página.' });
+  }
   const rows = await query(`
     INSERT INTO operational_settings (singleton, grace, destinations, revision)
     SELECT true, $1, $2::jsonb, 1
@@ -148,9 +172,11 @@ app.get('/api/state', async (_req, res) => {
   const analyst = res.locals.analyst;
   const [settings] = await query<{ grace: number; destinations: Record<string, string>; revision: number }>(
     'SELECT grace, destinations, revision FROM operational_settings');
-  const clients = config.clients.map(client => ({
-    ...client, chatwoot: (settings && Object.hasOwn(settings.destinations, client.name)
-      ? settings.destinations[client.name] : client.chatwoot) || undefined,
+  const registered = await query<{ name: string; initial_destination: string | null }>(
+    'SELECT name, initial_destination FROM registered_clients ORDER BY name');
+  const clients = registered.map(client => ({
+    name: client.name, chatwoot: (settings && Object.hasOwn(settings.destinations, client.name)
+      ? settings.destinations[client.name] : client.initial_destination) || undefined,
   }));
   res.json({ handovers, items, history, comments, grace: settings?.grace ?? grace, clients, jiraEnabled,
     settingsRevision: settings?.revision ?? 0, canEditSettings: !shared || Boolean(analyst?.admin),
@@ -199,7 +225,11 @@ app.post('/api/handovers/:handoverId/items', async (req, res) => {
   const handoverId = id.parse(req.params.handoverId);
   const itemId = id.nullable().parse(req.body.id ?? null);
   const name = author(req, res);
-  const details = JSON.stringify(item.parse(req.body.details));
+  const parsed = item.parse(req.body.details);
+  if (!(await query('SELECT name FROM registered_clients WHERE name = $1', [parsed.client])).length) {
+    return res.status(400).json({ error: 'Selecione um cliente cadastrado.' });
+  }
+  const details = JSON.stringify(parsed);
   const rows = await query(`
     WITH target AS (
       UPDATE handovers SET draft_revision = draft_revision + 1 WHERE id = $1
