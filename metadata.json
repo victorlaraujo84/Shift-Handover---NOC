@@ -1,6 +1,0 @@
-{
-  "name": "ShiftPulse NOC — Passagem de Turno Telco/Jira",
-  "description": "Console operacional de passagem de turno para equipes NOC Telco com vínculo Jira, disparo de cartões Teams e preparação de mensagens no Chatwoot.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
