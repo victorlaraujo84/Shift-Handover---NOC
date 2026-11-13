@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { RequestHandler } from 'express';
 
-type Analyst = { subject: string; name: string; startsAt: string[] };
+type Analyst = { subject: string; name: string; startsAt: string[]; admin?: boolean };
 
 export function proxyIdentity(token: string, analysts: Analyst[]): RequestHandler {
   const expected = Buffer.from(token);

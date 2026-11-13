@@ -33,6 +33,12 @@ await query(`
 `);
 await query('ALTER TABLE handovers ADD COLUMN IF NOT EXISTS teams_attempted_at timestamptz');
 await query('ALTER TABLE handovers ADD COLUMN IF NOT EXISTS draft_revision integer NOT NULL DEFAULT 0');
+await query(`CREATE TABLE IF NOT EXISTS operational_settings (
+  singleton boolean PRIMARY KEY CHECK (singleton),
+  grace integer NOT NULL CHECK (grace BETWEEN 0 AND 1440),
+  destinations jsonb NOT NULL,
+  revision integer NOT NULL DEFAULT 0
+)`);
 await query(`
   CREATE TABLE IF NOT EXISTS items (
     id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -102,6 +108,37 @@ const item = z.object({
   message: 'Preencha a mensagem para o cliente antes de compartilhar.',
 });
 
+const settingsInput = z.object({
+  grace: z.number().int().min(0).max(1440),
+  revision: z.number().int().nonnegative(),
+  destinations: z.array(z.object({
+    name: z.string(),
+    url: z.string().trim().max(500).refine(value => {
+      if (!value) return true;
+      const url = URL.parse(value);
+      return !!url && url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash &&
+        /^\/app\/accounts\/\d+\/(?:inbox\/\d+\/)?conversations\/\d+\/?$/.test(url.pathname);
+    }, 'Use o endereço HTTPS completo da conversa no Chatwoot.'),
+  })).max(config.clients.length),
+}).refine(value => new Set(value.destinations.map(entry => entry.name)).size === config.clients.length &&
+  value.destinations.every(entry => config.clients.some(client => client.name === entry.name)),
+  'A lista de clientes mudou. Atualize a página.');
+
+app.post('/api/settings', async (req, res) => {
+  if (shared && !res.locals.analyst.admin) return res.status(403).json({ error: 'Apenas administradores podem editar configurações.' });
+  const values = settingsInput.parse(req.body);
+  const rows = await query(`
+    INSERT INTO operational_settings (singleton, grace, destinations, revision)
+    SELECT true, $1, $2::jsonb, 1
+    WHERE $3::integer = 0 OR EXISTS (SELECT 1 FROM operational_settings)
+    ON CONFLICT (singleton) DO UPDATE SET grace = EXCLUDED.grace,
+      destinations = EXCLUDED.destinations, revision = operational_settings.revision + 1
+    WHERE operational_settings.revision = $3 RETURNING revision
+  `, [values.grace, JSON.stringify(Object.fromEntries(values.destinations.map(entry => [entry.name, entry.url]))), values.revision]);
+  if (!rows.length) return res.status(409).json({ error: 'As configurações mudaram. Recarregue a página antes de salvar.' });
+  res.json(rows[0]);
+});
+
 app.get('/api/state', async (_req, res) => {
   res.set('Cache-Control', 'no-store');
   const handovers = await query('SELECT * FROM handovers ORDER BY starts_at DESC');
@@ -109,7 +146,14 @@ app.get('/api/state', async (_req, res) => {
   const history = await query('SELECT * FROM item_history ORDER BY id DESC');
   const comments = await query('SELECT * FROM comments ORDER BY id');
   const analyst = res.locals.analyst;
-  res.json({ handovers, items, history, comments, grace, clients: config.clients, jiraEnabled,
+  const [settings] = await query<{ grace: number; destinations: Record<string, string>; revision: number }>(
+    'SELECT grace, destinations, revision FROM operational_settings');
+  const clients = config.clients.map(client => ({
+    ...client, chatwoot: (settings && Object.hasOwn(settings.destinations, client.name)
+      ? settings.destinations[client.name] : client.chatwoot) || undefined,
+  }));
+  res.json({ handovers, items, history, comments, grace: settings?.grace ?? grace, clients, jiraEnabled,
+    settingsRevision: settings?.revision ?? 0, canEditSettings: !shared || Boolean(analyst?.admin),
     teamsEnabled: Boolean(process.env.TEAMS_WEBHOOK_URL?.trim()),
     analyst: analyst ? { name: analyst.name, startsAt: analyst.startsAt } : null });
 });

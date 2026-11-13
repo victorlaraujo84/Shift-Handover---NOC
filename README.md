@@ -2,7 +2,7 @@
 
 ## Versão integrada
 
-A interface segue a identidade escura e a navegação do ShiftPulse NOC. A passagem ativa reúne a fila de pendências, a busca e a mensagem por cliente. **Histórico e turnos** abre as passagens anteriores e **Configurações** mostra a tolerância, as integrações habilitadas e os destinos cadastrados. A tela de configuração é de consulta. O administrador mantém os valores no servidor e no arquivo de cadastro.
+A interface segue a identidade escura e a navegação do ShiftPulse NOC. A passagem ativa reúne a fila de pendências, a busca e a mensagem por cliente. **Histórico e turnos** abre as passagens anteriores. Em **Configurações**, administradores podem editar a tolerância global e os destinos do Chatwoot. O banco guarda essas alterações e usa o ambiente e o arquivo como valores iniciais. Deixe a URL em branco para retirar um destino. No modo compartilhado, atribua `admin: true` somente às contas que administram a operação.
 
 A versão integrada usa PostgreSQL. Instalações do protótipo anterior que tenham registros em `.data/noc-store.json` precisam validar e migrar esses registros antes da troca de versão. O piloto pode começar com um banco novo e dados fictícios.
 

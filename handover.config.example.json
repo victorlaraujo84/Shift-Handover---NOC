@@ -4,6 +4,6 @@
     { "name": "Cliente Y" }
   ],
   "analysts": [
-    { "subject": "identificador-imutavel-do-sso", "name": "Analista NOC", "startsAt": ["2026-11-13T07:00:00-03:00"] }
+    { "subject": "identificador-imutavel-do-sso", "name": "Analista NOC", "admin": true, "startsAt": ["2026-11-13T07:00:00-03:00"] }
   ]
 }

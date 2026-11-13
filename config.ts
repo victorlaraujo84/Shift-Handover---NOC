@@ -10,6 +10,7 @@ const configSchema = z.object({
   analysts: z.array(z.object({
     subject: z.string().min(1),
     name: z.string().min(1),
+    admin: z.boolean().default(false),
     startsAt: z.array(z.iso.datetime({ offset: true })),
   })).default([]),
 }).refine(config => new Set(config.clients.map(entry => entry.name)).size === config.clients.length &&

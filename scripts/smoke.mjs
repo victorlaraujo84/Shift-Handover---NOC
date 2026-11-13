@@ -56,6 +56,17 @@ try {
     });
   });
   assert.match(await (await fetch(base)).text(), /Passagem de turno/);
+  const original = await call('/state');
+  const settings = {
+    grace: 0, revision: original.settingsRevision,
+    destinations: [{ name: 'Cliente X', url: 'https://app.chatwoot.com/app/accounts/1/conversations/101' }, { name: 'Cliente Y', url: '' }],
+  };
+  await call('/settings', { ...settings, destinations: [{ name: 'Cliente X', url: 'https://example.com/' }, settings.destinations[1]] }, 400);
+  await call('/settings', settings);
+  await call('/settings', settings, 409);
+  const configured = await call('/state');
+  assert.equal(configured.grace, 0);
+  assert.equal(configured.clients[0].chatwoot, settings.destinations[0].url);
   const outgoing = { actor: 'Analista de saída' };
   const incoming = { actor: 'Analista de entrada', caveat: 'Validar visita' };
   const first = await call('/handovers', { startsAt: '2026-11-13T10:00:00Z' }, 201);

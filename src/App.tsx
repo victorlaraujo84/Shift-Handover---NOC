@@ -26,6 +26,7 @@ type Client = { name: string; chatwoot?: string };
 type State = {
   handovers: Handover[]; items: Item[]; history: History[]; comments: Comment[]; grace: number;
   clients: Client[]; analyst: { name: string; startsAt: string[] } | null; jiraEnabled: boolean; teamsEnabled: boolean;
+  settingsRevision: number; canEditSettings: boolean;
 };
 const views = ['Passagem ativa', 'Histórico e turnos', 'Configurações'] as const;
 const blank: Details = { client: '', jira: '', update: '', next: '', followUp: '', external: '', share: false, open: true };
@@ -193,7 +194,28 @@ function App() {
             </dl>
             <h2>Destinos por cliente</h2>
             <ul>{state.clients.map(client => <li key={client.name}>{client.name} · {client.chatwoot ? 'Conversa cadastrada' : 'Conversa pendente'}</li>)}</ul>
-            <p>O administrador configura a escala e os destinos no arquivo de configuração e as integrações no servidor.</p>
+            {state.canEditSettings && <form key={state.settingsRevision} className="item-form" onSubmit={event => {
+              event.preventDefault();
+              const data = new FormData(event.currentTarget);
+              void act(async () => {
+                await request('/settings', {
+                  grace: Number(data.get('grace')),
+                  revision: state.settingsRevision,
+                  destinations: state.clients.map((client, index) => ({ name: client.name, url: data.get(`destination-${index}`) })),
+                });
+                setPreview(undefined);
+              }, 'Configurações salvas.');
+            }}>
+              <h2>Editar configurações operacionais</h2>
+              <label>Tolerância de aceite (minutos)<input name="grace" type="number" min="0" max="1440" required defaultValue={state.grace} /></label>
+              {state.clients.map((client, index) => <label key={client.name}>
+                Conversa Chatwoot · {client.name}
+                <input name={`destination-${index}`} type="url" maxLength={500} defaultValue={client.chatwoot ?? ''} />
+              </label>)}
+              <button disabled={busy}>Salvar configurações</button>
+            </form>}
+            <p>A escala e as credenciais das integrações são administradas no servidor.</p>
+            {feedback && <p role="status" className="notice">{feedback}</p>}
           </> : <p>Carregando configurações…</p>}
         </section> : view === 'Histórico e turnos' ? <section className="content settings" aria-label="Histórico de turnos">
           {state?.handovers.length ? <ul className="turn-history">{state.handovers.map(entry => <li key={entry.id}>
