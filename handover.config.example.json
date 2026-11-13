@@ -1,0 +1,9 @@
+{
+  "clients": [
+    { "name": "Cliente X", "chatwoot": "https://app.chatwoot.com/app/accounts/1/conversations/101" },
+    { "name": "Cliente Y" }
+  ],
+  "analysts": [
+    { "subject": "identificador-imutavel-do-sso", "name": "Analista NOC", "startsAt": ["2026-11-13T07:00:00-03:00"] }
+  ]
+}

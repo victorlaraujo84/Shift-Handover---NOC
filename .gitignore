@@ -1,8 +1,6 @@
+.env
+handover.config.json
+.handover-data/
+.pnpm-store/
 node_modules/
-build/
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
